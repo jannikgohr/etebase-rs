@@ -701,24 +701,35 @@ impl EncryptedRevision {
         if !chunks.is_empty() {
             let mut indices = shuffle(&mut chunks);
 
-            // Filter duplicates and construct the indice list.
-            let mut uid_indices: HashMap<String, usize> = HashMap::new();
+            // Filter duplicates and store indices as post-dedup positions
+            // (the array decode indexes into).
+            let mut uid_to_dedup_pos: HashMap<String, usize> = HashMap::new();
+            let mut shuffled_to_dedup_pos: HashMap<usize, usize> = HashMap::new();
+            let mut next_dedup_pos: usize = 0;
             chunks = chunks
                 .into_iter()
                 .enumerate()
                 .filter_map(|(i, chunk)| {
                     let uid = &chunk.0;
-                    match uid_indices.get(uid) {
-                        Some(previous_index) => {
-                            indices[i] = *previous_index;
+                    match uid_to_dedup_pos.get(uid) {
+                        Some(dedup_pos) => {
+                            shuffled_to_dedup_pos.insert(i, *dedup_pos);
                             None
                         }
                         None => {
-                            uid_indices.insert(uid.to_string(), i);
+                            let dedup_pos = next_dedup_pos;
+                            next_dedup_pos += 1;
+                            uid_to_dedup_pos.insert(uid.to_string(), dedup_pos);
+                            shuffled_to_dedup_pos.insert(i, dedup_pos);
                             Some(chunk)
                         }
                     }
                 })
+                .collect();
+
+            indices = indices
+                .into_iter()
+                .map(|i| shuffled_to_dedup_pos[&i])
                 .collect();
 
             // If we have more than one chunk we need to encode the mapping header in the last chunk
@@ -783,13 +794,16 @@ impl EncryptedRevision {
         match indices {
             Some(indices) => {
                 if indices.len() > 1 {
-                    let sorted_chunks: Vec<u8> = indices
-                        .into_iter()
-                        .flat_map(|index| &decrypted_chunks[index])
-                        // FIXME: We shouldn't copy but rather just move from the array
-                        .copied()
-                        .collect::<Vec<u8>>();
-
+                    // TODO: still copies each chunk's bytes. Moving instead
+                    // requires tracking last-use of each index so duplicate
+                    // references still have data to read.
+                    let mut sorted_chunks: Vec<u8> = Vec::new();
+                    for index in indices {
+                        let chunk = decrypted_chunks.get(index).ok_or(
+                            Error::Encryption("Chunk index out of range"),
+                        )?;
+                        sorted_chunks.extend_from_slice(chunk);
+                    }
                     Ok(sorted_chunks)
                 } else {
                     Ok(decrypted_chunks.into_iter().next().unwrap_or_default())
