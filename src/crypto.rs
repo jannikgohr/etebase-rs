@@ -419,6 +419,8 @@ mod tests {
 
     const KEY: &str = "Eq9b_rdbzeiU3P4sg5qN24KXbNgy8GgCeC74nFF99hI";
     const SALT: &str = "6y7jUaojtLq6FISBWPjwXTeiYk5cTiz1oe6HVNGvn2E";
+    const CLEAR_TEXT: &[u8] = b"This Is Some Test Cleartext.";
+    const ADDITIONAL_DATA: &[u8] = b"additional data";
 
     #[test]
     fn derive_key() {
@@ -480,18 +482,63 @@ mod tests {
     }
 
     #[test]
+    fn crypto_manager_decrypts_sodiumoxide_vectors() {
+        crate::init().unwrap();
+
+        let key = from_base64(KEY).unwrap();
+        let context = b"Col     ";
+        let crypto_manager = super::CryptoManager::new(
+            &key[0..32].try_into().unwrap(),
+            context,
+            crate::CURRENT_VERSION,
+        )
+        .unwrap();
+
+        let cipher = from_base64(
+            "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHosFkyoBgpJRy5uCLhXz9VAlZYocdOTKd7pShUEWh_PbWqGg0B178LNJtynM",
+        )
+        .unwrap();
+        let decrypted = crypto_manager
+            .decrypt(&cipher, Some(ADDITIONAL_DATA))
+            .unwrap();
+        assert_eq!(CLEAR_TEXT, &decrypted[..]);
+
+        let detached_cipher =
+            from_base64("BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHosFkyoBgpJRy5uCLhXz9VAlZYocdOTKd7pShUA")
+                .unwrap();
+        let tag = from_base64("RaH89taoaDQHXvws0m3Kcw").unwrap();
+        let tag: &[u8; 16] = tag.as_slice().try_into().unwrap();
+        let decrypted = crypto_manager
+            .decrypt_detached(&detached_cipher, tag, Some(ADDITIONAL_DATA))
+            .unwrap();
+        assert_eq!(CLEAR_TEXT, &decrypted[..]);
+        assert!(crypto_manager
+            .verify(&detached_cipher, tag, Some(ADDITIONAL_DATA))
+            .unwrap());
+    }
+
+    #[test]
     fn login_crypto_manager() {
         crate::init().unwrap();
 
         let login_crypto_manager = super::LoginCryptoManager::keygen(&[0; 32]).unwrap();
 
-        let msg = b"This Is Some Test Cleartext.";
-        let signature = login_crypto_manager.sign_detached(msg).unwrap();
+        let signature = login_crypto_manager.sign_detached(CLEAR_TEXT).unwrap();
         let pubkey = login_crypto_manager.pubkey();
+
+        assert_eq!(
+            pubkey,
+            from_base64("O2onvM62pC1io6jQKm8Nc2UyFXcd4kOmOsBIoYtZ2ik").unwrap()
+        );
+        assert_eq!(
+            signature,
+            from_base64("6xtVka_CHJ-O20Ak50FPzqtjYCT2S8pKm3GSvWSksbfUijEDDq9vc2ySJm-xX9ClfKQVETj53lk6TrkSyHLqBg")
+                .unwrap()
+        );
 
         let signature = sign::Signature::from_bytes(&signature).unwrap();
         let pubkey = sign::PublicKey::from_slice(pubkey).unwrap();
-        assert!(sign::verify_detached(&signature, msg, &pubkey));
+        assert!(sign::verify_detached(&signature, CLEAR_TEXT, &pubkey));
     }
 
     #[test]
@@ -509,6 +556,40 @@ mod tests {
             .decrypt(&cipher[..], box_crypto_manager.pubkey().try_into().unwrap())
             .unwrap();
         assert_eq!(decrypted, msg);
+    }
+
+    #[test]
+    fn box_crypto_manager_sodiumoxide_vectors() {
+        crate::init().unwrap();
+
+        let box_crypto_manager = super::BoxCryptoManager::keygen(Some(&[0; 32])).unwrap();
+        assert_eq!(
+            box_crypto_manager.pubkey(),
+            from_base64("W_Vcc7guviK-gPNDBmevVw-uJVamQV5rMNQGUwCqlH0").unwrap()
+        );
+        assert_eq!(
+            box_crypto_manager.privkey(),
+            from_base64("UEatwduoOIZ7K7v90MNCPli1eXC1JnqQ9XlgkkqH8ZY").unwrap()
+        );
+
+        let box_crypto_manager2 = super::BoxCryptoManager::keygen(Some(&[1; 32])).unwrap();
+        assert_eq!(
+            box_crypto_manager2.pubkey(),
+            from_base64("GxtY3VDqFLYNoXt5DNAnVNlwybq4ZOuzwPMBb-UdP1c").unwrap()
+        );
+        assert_eq!(
+            box_crypto_manager2.privkey(),
+            from_base64("XOhu-3X6TixBD0bhben2rK4aFwNShlG2m8F2wIi-8-4").unwrap()
+        );
+
+        let cipher = from_base64(
+            "AgICAgICAgICAgICAgICAgICAgICAgICpGeUVz1ez0HGUlhTPA_eaJMi5KQlLDqHB7xbn2VvDyQcYre1jlVDfD167vI",
+        )
+        .unwrap();
+        let decrypted = box_crypto_manager2
+            .decrypt(&cipher, box_crypto_manager.pubkey().try_into().unwrap())
+            .unwrap();
+        assert_eq!(decrypted, CLEAR_TEXT);
     }
 
     #[test]

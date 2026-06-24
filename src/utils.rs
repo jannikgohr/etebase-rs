@@ -328,4 +328,33 @@ mod tests {
             assert_eq!(unpadded, &buf[..]);
         }
     }
+
+    #[test]
+    fn pad_fixed_uses_sodium_padding_format() {
+        crate::init().unwrap();
+
+        let mut expected = (0u8..33).collect::<Vec<_>>();
+        expected.push(0x80);
+        expected.resize(64, 0);
+
+        let padded = super::buffer_pad_fixed(&(0u8..33).collect::<Vec<_>>(), 32).unwrap();
+        assert_eq!(padded, expected);
+        assert_eq!(
+            super::buffer_unpad_fixed(&padded, 32).unwrap(),
+            (0u8..33).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn randombytes_deterministic_matches_sodium_stream_format() {
+        crate::init().unwrap();
+
+        assert_eq!(
+            super::randombytes_deterministic(32, &[0; 32]),
+            vec![
+                5, 67, 208, 128, 105, 110, 24, 70, 104, 100, 159, 151, 254, 43, 170, 107, 236, 61,
+                60, 115, 129, 117, 68, 253, 194, 103, 95, 127, 61, 188, 4, 242
+            ]
+        );
+    }
 }

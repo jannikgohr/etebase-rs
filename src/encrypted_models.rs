@@ -799,9 +799,9 @@ impl EncryptedRevision {
                     // references still have data to read.
                     let mut sorted_chunks: Vec<u8> = Vec::new();
                     for index in indices {
-                        let chunk = decrypted_chunks.get(index).ok_or(
-                            Error::Encryption("Chunk index out of range"),
-                        )?;
+                        let chunk = decrypted_chunks
+                            .get(index)
+                            .ok_or(Error::Encryption("Chunk index out of range"))?;
                         sorted_chunks.extend_from_slice(chunk);
                     }
                     Ok(sorted_chunks)
