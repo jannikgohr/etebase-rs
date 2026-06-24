@@ -149,7 +149,7 @@ impl CryptoManager {
         tag: &[u8; SYMMETRIC_TAG_SIZE],
         additional_data: Option<&[u8]>,
     ) -> Result<Vec<u8>> {
-        let (nonce, cipher) = split_aead_cipher(cipher)?;
+        let (nonce, cipher) = split_aead_detached_cipher(cipher)?;
         let mut decrypted = cipher.to_owned();
         aead_decrypt_detached(
             &self.cipher_key,
@@ -347,6 +347,14 @@ impl CryptoMac {
 
 fn split_aead_cipher(cipher: &[u8]) -> Result<(&[u8; SYMMETRIC_NONCE_SIZE], &[u8])> {
     if cipher.len() < SYMMETRIC_NONCE_SIZE + SYMMETRIC_TAG_SIZE {
+        return Err(Error::Encryption("ciphertext too short"));
+    }
+
+    split_aead_detached_cipher(cipher)
+}
+
+fn split_aead_detached_cipher(cipher: &[u8]) -> Result<(&[u8; SYMMETRIC_NONCE_SIZE], &[u8])> {
+    if cipher.len() < SYMMETRIC_NONCE_SIZE {
         return Err(Error::Encryption("ciphertext too short"));
     }
 
@@ -586,6 +594,27 @@ mod tests {
         assert!(crypto_manager
             .verify(&detached_cipher, tag, Some(ADDITIONAL_DATA))
             .unwrap());
+    }
+
+    #[test]
+    fn crypto_manager_detached_accepts_short_ciphertexts() {
+        crate::init().unwrap();
+
+        let key = from_base64(KEY).unwrap();
+        let crypto_manager = super::CryptoManager::new(
+            &key[0..32].try_into().unwrap(),
+            b"ColItem ",
+            crate::CURRENT_VERSION,
+        )
+        .unwrap();
+
+        for clear_text in [b"".as_slice(), b"short".as_slice()] {
+            let (tag, cipher) = crypto_manager.encrypt_detached(clear_text, None).unwrap();
+            assert_eq!(cipher.len(), super::SYMMETRIC_NONCE_SIZE + clear_text.len());
+            let tag: &[u8; 16] = tag.as_slice().try_into().unwrap();
+            let decrypted = crypto_manager.decrypt_detached(&cipher, tag, None).unwrap();
+            assert_eq!(decrypted, clear_text);
+        }
     }
 
     #[test]
