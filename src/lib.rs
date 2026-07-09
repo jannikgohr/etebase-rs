@@ -29,7 +29,7 @@ pub use online_managers::{
 
 pub use encrypted_models::{CollectionAccessLevel, ItemMetadata, SignedInvitation};
 
-pub use service::{Account, Collection, Item};
+pub use service::{Account, Collection, InvitationPreview, Item};
 
 pub mod managers {
     pub use super::service::{

@@ -30,6 +30,49 @@ use super::{
     },
 };
 
+/// A decrypted, non-mutating preview of a collection invitation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InvitationPreview {
+    pub uid: String,
+    pub username: String,
+    pub sender_username: Option<String>,
+    pub collection_uid: String,
+    pub access_level: CollectionAccessLevel,
+    pub collection_type: String,
+}
+
+impl InvitationPreview {
+    /// The uid of the invitation.
+    pub fn uid(&self) -> &str {
+        &self.uid
+    }
+
+    /// The username this invitation is for.
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    /// The username of the inviting user.
+    pub fn sender_username(&self) -> Option<&str> {
+        self.sender_username.as_deref()
+    }
+
+    /// The collection uid this invitation is for.
+    pub fn collection_uid(&self) -> &str {
+        &self.collection_uid
+    }
+
+    /// The access level offered in this invitation.
+    pub fn access_level(&self) -> CollectionAccessLevel {
+        self.access_level
+    }
+
+    /// The decrypted collection type this invitation grants access to.
+    pub fn collection_type(&self) -> &str {
+        &self.collection_type
+    }
+}
+
 struct MainCryptoManager(CryptoManager);
 
 impl MainCryptoManager {
@@ -1135,9 +1178,7 @@ impl CollectionInvitationManager {
     /// # Arguments:
     /// * `invitation` - the invitation to accept
     pub fn accept(&self, invitation: &SignedInvitation) -> Result<()> {
-        let raw_content =
-            buffer_unpad(&invitation.decrypted_encryption_key(&self.identity_crypto_manager)?)?;
-        let content: SignedInvitationContent = rmp_serde::from_slice(&raw_content)?;
+        let content = self.decrypt_invitation_content(invitation)?;
         let collection_type_uid = self
             .account_crypto_manager
             .collection_type_to_uid(&content.collection_type)?;
@@ -1147,6 +1188,35 @@ impl CollectionInvitationManager {
             .encrypt(&content.encryption_key, Some(&collection_type_uid))?;
         self.invitation_manager_online
             .accept(invitation, &collection_type_uid, encryption_key)
+    }
+
+    /// Preview an incoming invitation without accepting it or contacting the server.
+    ///
+    /// This is intended for grouping and displaying incoming invites before acceptance.
+    /// It decrypts the invitation content to expose the collection type, so it only works
+    /// when the invitation includes decryptable sender public key material.
+    ///
+    /// # Arguments:
+    /// * `invitation` - the invitation to preview
+    pub fn preview(&self, invitation: &SignedInvitation) -> Result<InvitationPreview> {
+        let content = self.decrypt_invitation_content(invitation)?;
+        Ok(InvitationPreview {
+            uid: invitation.uid().to_owned(),
+            username: invitation.username().to_owned(),
+            sender_username: invitation.sender_username().map(str::to_owned),
+            collection_uid: invitation.collection().to_owned(),
+            access_level: invitation.access_level(),
+            collection_type: content.collection_type,
+        })
+    }
+
+    fn decrypt_invitation_content(
+        &self,
+        invitation: &SignedInvitation,
+    ) -> Result<SignedInvitationContent> {
+        let raw_content =
+            buffer_unpad(&invitation.decrypted_encryption_key(&self.identity_crypto_manager)?)?;
+        Ok(rmp_serde::from_slice(&raw_content)?)
     }
 
     /// Reject an invitation
