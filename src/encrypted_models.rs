@@ -10,7 +10,6 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use sodiumoxide::crypto::sign;
 
 use super::{
     chunker::Rollsum,
@@ -19,7 +18,7 @@ use super::{
     utils::{
         buffer_pad, buffer_pad_fixed, buffer_pad_small, buffer_unpad, buffer_unpad_fixed,
         from_base64, memcmp, randombytes, shuffle, to_base64, MsgPackSerilization, StringBase64,
-        SYMMETRIC_KEY_SIZE,
+        PRIVATE_KEY_SIZE, SYMMETRIC_KEY_SIZE,
     },
     CURRENT_VERSION,
 };
@@ -477,7 +476,7 @@ impl EncryptedCollection {
         account_crypto_manager: &AccountCryptoManager,
         identity_crypto_manager: &BoxCryptoManager,
         username: &str,
-        pubkey: &[u8; sign::PUBLICKEYBYTES],
+        pubkey: &[u8; PRIVATE_KEY_SIZE],
         access_level: CollectionAccessLevel,
     ) -> Result<SignedInvitation> {
         let uid = to_base64(&randombytes(32))?;
@@ -799,9 +798,9 @@ impl EncryptedRevision {
                     // references still have data to read.
                     let mut sorted_chunks: Vec<u8> = Vec::new();
                     for index in indices {
-                        let chunk = decrypted_chunks.get(index).ok_or(
-                            Error::Encryption("Chunk index out of range"),
-                        )?;
+                        let chunk = decrypted_chunks
+                            .get(index)
+                            .ok_or(Error::Encryption("Chunk index out of range"))?;
                         sorted_chunks.extend_from_slice(chunk);
                     }
                     Ok(sorted_chunks)

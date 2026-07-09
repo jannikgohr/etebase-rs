@@ -93,6 +93,7 @@ impl From<url::ParseError> for Error {
     }
 }
 
+#[allow(clippy::incompatible_msrv)]
 impl From<std::ffi::NulError> for Error {
     fn from(err: std::ffi::NulError) -> Error {
         Error::Generic(err.to_string())
