@@ -19,7 +19,7 @@ use dryoc::{
 };
 
 use crate::utils::{
-    randombytes_array, PRIVATE_KEY_SIZE, SALT_SIZE, SYMMETRIC_KEY_SIZE, SYMMETRIC_NONCE_SIZE,
+    randombytes_array, PUBLIC_KEY_SIZE, SALT_SIZE, SYMMETRIC_KEY_SIZE, SYMMETRIC_NONCE_SIZE,
     SYMMETRIC_TAG_SIZE,
 };
 
@@ -282,7 +282,7 @@ impl BoxCryptoManager {
         Ok(ret)
     }
 
-    pub fn decrypt(&self, cipher: &[u8], pubkey: &[u8; PRIVATE_KEY_SIZE]) -> Result<Vec<u8>> {
+    pub fn decrypt(&self, cipher: &[u8], pubkey: &[u8; PUBLIC_KEY_SIZE]) -> Result<Vec<u8>> {
         if cipher.len() < CRYPTO_BOX_NONCEBYTES + CRYPTO_BOX_MACBYTES {
             return Err(Error::Encryption("ciphertext too short"));
         }
