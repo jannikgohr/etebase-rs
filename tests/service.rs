@@ -1077,6 +1077,23 @@ fn collection_invitations() -> Result<()> {
     let invitation = invitations.data().first().unwrap();
     assert_eq!(invitation.sender_pubkey(), user1_pubkey);
 
+    let preview = invite_mgr2.preview(invitation)?;
+    assert_eq!(preview.uid(), invitation.uid());
+    assert_eq!(preview.username(), invitation.username());
+    assert_eq!(preview.sender_username(), invitation.sender_username());
+    assert_eq!(preview.collection_uid(), invitation.collection());
+    assert_eq!(preview.collection_uid(), col.uid());
+    assert_eq!(preview.access_level(), invitation.access_level());
+    assert_eq!(preview.access_level(), CollectionAccessLevel::ReadWrite);
+    assert_eq!(preview.collection_type(), "some.coltype");
+
+    {
+        let collections = col_mgr2.list("some.coltype", None)?;
+        assert_eq!(collections.data().len(), 0);
+        let invitations = invite_mgr2.list_incoming(None)?;
+        assert_eq!(invitations.data().len(), 1);
+    }
+
     invite_mgr2.accept(invitation)?;
 
     {

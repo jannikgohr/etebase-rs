@@ -3,7 +3,7 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chacha20::cipher::{KeyIvInit, StreamCipher};
-use subtle::ConstantTimeEq;
+use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
 use super::error::{Error, Result};
 
@@ -14,6 +14,8 @@ pub type StringBase64 = String;
 pub const SALT_SIZE: usize = 16; // sodium.crypto_pwhash_argon2id_SALTBYTES
 /// The size of the private encryption key
 pub const PRIVATE_KEY_SIZE: usize = 32; // sodium.crypto_box_curve25519xsalsa20poly1305_SECRETKEYBYTES;
+/// The size of the public encryption key
+pub const PUBLIC_KEY_SIZE: usize = 32; // sodium.crypto_box_curve25519xsalsa20poly1305_PUBLICKEYBYTES;
 /// The size of a symmetric encryption key
 pub const SYMMETRIC_KEY_SIZE: usize = 32; // sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES;
 /// The size of a symmetric encryption tag
@@ -259,15 +261,17 @@ pub(crate) fn buffer_unpad(buf: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn buffer_pad_fixed(buf: &[u8], blocksize: usize) -> Result<Vec<u8>> {
+    if blocksize == 0 {
+        return Err(Error::Padding("Failed padding"));
+    }
+
     let len = buf.len();
     let missing = blocksize - (len % blocksize);
     let padding = len + missing;
     let mut ret = vec![0; padding];
     ret[..len].copy_from_slice(buf);
 
-    if blocksize == 0 || len >= ret.len() {
-        return Err(Error::Padding("Failed padding"));
-    }
+    // `missing` is always at least 1, so this index is in bounds.
     ret[len] = 0x80;
 
     Ok(ret)
@@ -283,13 +287,27 @@ pub(crate) fn buffer_unpad_fixed(buf: &[u8], blocksize: usize) -> Result<Vec<u8>
         return Err(Error::Padding("Failed unpadding"));
     }
 
-    let new_len = buf
-        .iter()
-        .rposition(|&byte| byte != 0)
-        .filter(|&pos| buf[pos] == 0x80)
-        .ok_or(Error::Padding("Failed unpadding"))?;
+    // Scan the whole buffer regardless of where the padding marker sits so the
+    // running time doesn't leak the unpadded length (matching libsodium's unpad).
+    let mut found = Choice::from(0u8);
+    let mut valid = Choice::from(0u8);
+    let mut new_len = 0u32;
+    for i in (0..len).rev() {
+        let byte = buf[i];
+        let is_nonzero = !byte.ct_eq(&0);
+        // The first nonzero byte encountered scanning from the end is the marker.
+        let is_marker = is_nonzero & !found;
+        new_len.conditional_assign(&(i as u32), is_marker);
+        valid |= is_marker & byte.ct_eq(&0x80);
+        found |= is_nonzero;
+    }
+
+    if !bool::from(valid) {
+        return Err(Error::Padding("Failed unpadding"));
+    }
+
     let mut buf = buf.to_vec();
-    buf.truncate(new_len);
+    buf.truncate(new_len as usize);
     Ok(buf)
 }
 

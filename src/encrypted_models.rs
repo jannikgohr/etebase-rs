@@ -18,7 +18,7 @@ use super::{
     utils::{
         buffer_pad, buffer_pad_fixed, buffer_pad_small, buffer_unpad, buffer_unpad_fixed,
         from_base64, memcmp, randombytes, shuffle, to_base64, MsgPackSerilization, StringBase64,
-        PRIVATE_KEY_SIZE, SYMMETRIC_KEY_SIZE,
+        PUBLIC_KEY_SIZE, SYMMETRIC_KEY_SIZE,
     },
     CURRENT_VERSION,
 };
@@ -476,7 +476,7 @@ impl EncryptedCollection {
         account_crypto_manager: &AccountCryptoManager,
         identity_crypto_manager: &BoxCryptoManager,
         username: &str,
-        pubkey: &[u8; PRIVATE_KEY_SIZE],
+        pubkey: &[u8; PUBLIC_KEY_SIZE],
         access_level: CollectionAccessLevel,
     ) -> Result<SignedInvitation> {
         let uid = to_base64(&randombytes(32))?;
